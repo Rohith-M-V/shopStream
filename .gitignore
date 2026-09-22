@@ -1,0 +1,13 @@
+target/
+.idea/
+*.iml
+.vscode/
+.DS_Store
+*.log
+.env
+.mvn/wrapper/maven-wrapper.jar
+
+# The repo ships with a placeholder dev RSA key pair committed on purpose
+# (see auth/src/main/resources/keys) so a fresh clone builds and runs without
+# extra setup. Never commit a REAL/production key pair -- if you regenerate
+# real keys for a deployment, keep them out of git entirely.

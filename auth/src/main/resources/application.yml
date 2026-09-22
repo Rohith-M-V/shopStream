@@ -1,0 +1,36 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: jdbc:mysql://localhost:3307/auth_db?useSSL=false&allowPublicKeyRetrieval=true
+    username: shop
+    password: shop
+  jpa:
+    hibernate:
+      ddl-auto: validate # schema comes from Flyway, never from Hibernate auto-DDL
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+app:
+  jwt:
+    private-key-location: classpath:keys/private_key.pem
+    issuer: shopstream-auth
+    expiration-minutes: 60
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    com.shopstream: INFO

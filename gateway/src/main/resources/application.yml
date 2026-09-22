@@ -1,0 +1,31 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Spring Boot auto-configures a JwtDecoder straight from this PEM file --
+          # no custom decoder bean needed. The gateway only ever holds the public key.
+          public-key-location: classpath:keys/public_key.pem
+
+services:
+  auth:
+    uri: http://localhost:8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    com.shopstream: INFO
+    org.springframework.cloud.gateway: INFO
