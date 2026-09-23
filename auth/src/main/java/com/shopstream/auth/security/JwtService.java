@@ -2,6 +2,7 @@ package com.shopstream.auth.security;
 
 import com.shopstream.auth.config.JwtProperties;
 import com.shopstream.auth.user.User;
+import com.shopstream.common.security.PemKeyLoader;
 import io.jsonwebtoken.Jwts;
 import java.security.interfaces.RSAPrivateKey;
 import java.time.Instant;
@@ -23,7 +24,12 @@ public class JwtService {
 
     public JwtService(JwtProperties properties, ResourceLoader resourceLoader) {
         this.properties = properties;
-        this.privateKey = PemKeyLoader.loadPrivateKey(resourceLoader.getResource(properties.privateKeyLocation()));
+        try {
+            var resource = resourceLoader.getResource(properties.privateKeyLocation());
+            this.privateKey = PemKeyLoader.loadPrivateKey(resource.getInputStream());
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Could not read " + properties.privateKeyLocation(), e);
+        }
     }
 
     public String generateAccessToken(User user) {

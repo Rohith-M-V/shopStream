@@ -30,6 +30,7 @@
         <module>common</module>
         <module>auth</module>
         <module>gateway</module>
+        <module>inventory</module>
     </modules>
 
     <dependencyManagement>

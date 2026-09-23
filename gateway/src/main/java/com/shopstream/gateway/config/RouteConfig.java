@@ -19,12 +19,18 @@ public class RouteConfig {
     @Value("${services.auth.uri:http://localhost:8081}")
     private String authServiceUri;
 
+    @Value("${services.inventory.uri:http://localhost:8082}")
+    private String inventoryServiceUri;
+
     @Bean
     public RouteLocator routes(RouteLocatorBuilder builder) {
         return builder.routes()
                 .route("auth-service", r -> r
                         .path("/api/auth/**")
                         .uri(authServiceUri))
+                .route("inventory-service", r -> r
+                        .path("/api/products/**", "/api/reservations/**")
+                        .uri(inventoryServiceUri))
                 .build();
     }
 }

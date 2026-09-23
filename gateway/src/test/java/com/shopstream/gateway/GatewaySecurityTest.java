@@ -49,4 +49,18 @@ class GatewaySecurityTest {
                     }
                 });
     }
+
+    @Test
+    void catalogBrowsingIsPublicEvenWithoutAToken() {
+        // No inventory-service running in this test either -- same idea as
+        // above: proves security lets GET /api/products/** through unauthenticated.
+        webTestClient.get().uri("/api/products/00000000-0000-0000-0000-000000000000")
+                .exchange()
+                .expectStatus().value(status -> {
+                    if (status == HttpStatus.UNAUTHORIZED.value()) {
+                        throw new AssertionError(
+                                "public catalog route was rejected by the security filter chain");
+                    }
+                });
+    }
 }

@@ -1,0 +1,41 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: inventory-service
+  datasource:
+    url: jdbc:mysql://localhost:3307/inventory_db?useSSL=false&allowPublicKeyRetrieval=true
+    username: shop
+    password: shop
+  jpa:
+    hibernate:
+      ddl-auto: validate # schema comes from Flyway, never from Hibernate auto-DDL
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Same mechanism as the gateway: Boot builds a JwtDecoder straight from
+          # this public key file. Inventory never holds the private key.
+          public-key-location: classpath:keys/public_key.pem
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    com.shopstream: INFO

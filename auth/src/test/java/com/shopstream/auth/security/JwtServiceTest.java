@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shopstream.auth.config.JwtProperties;
 import com.shopstream.auth.user.User;
+import com.shopstream.common.security.PemKeyLoader;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.Test;
@@ -20,13 +21,14 @@ class JwtServiceTest {
     }
 
     @Test
-    void generatedTokenCanBeVerifiedWithTheMatchingPublicKey() {
+    void generatedTokenCanBeVerifiedWithTheMatchingPublicKey() throws java.io.IOException {
         JwtService jwtService = newJwtService(60);
         User user = User.newCustomer("jane@example.com", "irrelevant-hash");
 
         String token = jwtService.generateAccessToken(user);
 
-        var publicKey = PemKeyLoader.loadPublicKey(resourceLoader.getResource("classpath:keys/public_key.pem"));
+        var publicKey = PemKeyLoader.loadPublicKey(
+                resourceLoader.getResource("classpath:keys/public_key.pem").getInputStream());
         Claims claims = Jwts.parser()
                 .verifyWith(publicKey)
                 .build()
