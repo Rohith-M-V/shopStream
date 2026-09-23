@@ -32,7 +32,7 @@ import org.springframework.http.HttpStatus;
  * than there is stock to satisfy, against a real MySQL instance, and checks
  * that exactly as many succeed as there was stock, never more.
  */
-class ReservationConcurrencyTest extends AbstractIntegrationTest {
+class ReservationConcurrencyIT extends AbstractIntegrationTest {
 
     @Autowired
     private TestRestTemplate restTemplate;
