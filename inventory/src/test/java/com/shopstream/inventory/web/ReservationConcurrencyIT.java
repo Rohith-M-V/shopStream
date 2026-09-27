@@ -63,6 +63,9 @@ class ReservationConcurrencyIT extends AbstractIntegrationTest {
                 var response = restTemplate.exchange(
                         "/api/products/" + product.id() + "/reserve", HttpMethod.POST,
                         new HttpEntity<>(new ReserveStockRequest(1), headers), String.class);
+                // ResponseEntity#getStatusCode() returns HttpStatusCode (an interface,
+                // to allow non-standard codes) since Spring 6, not the HttpStatus enum
+                // directly, so it needs an explicit cast to match Callable<HttpStatus>.
                 return (HttpStatus) response.getStatusCode();
             });
         }
@@ -94,6 +97,9 @@ class ReservationConcurrencyIT extends AbstractIntegrationTest {
         // stock -- not more (overselling) and, thanks to the retry loop, not
         // fewer either (a naive single-attempt approach would reject some
         // requests to real available stock just because of lock contention).
+        // Splitting "conflict" (the expected 409 for real insufficient stock)
+        // from "unexpected" (anything else, e.g. a stray 500) makes this a
+        // stricter check than just counting "anything non-200 as a rejection".
         assertThat(succeeded).isEqualTo(initialStock);
         assertThat(conflicts).isEqualTo(concurrentRequests - initialStock);
         assertThat(unexpected).isEqualTo(0);

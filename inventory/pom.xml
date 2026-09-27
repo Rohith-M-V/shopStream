@@ -72,6 +72,10 @@
         </dependency>
 
         <dependency>
+            <!-- The actual Boot 4 artifact for AspectJ-based AOP support (what
+                 @Retryable/@EnableRetry needs to proxy methods) - renamed from
+                 the old spring-boot-starter-aop, consistent with the modularization
+                 we've hit everywhere else this phase (Flyway, Redis, RestTestClient). -->
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aspectj</artifactId>
         </dependency>

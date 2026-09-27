@@ -31,14 +31,12 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
-    public ResponseEntity<ErrorResponse> handleOptimisticLock(
-            ObjectOptimisticLockingFailureException ex) {
-
+    public ResponseEntity<ErrorResponse> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
+        // Reached only if @Retryable exhausts every attempt under very heavy
+        // contention -- without this handler it would surface as an
+        // unhandled 500, which is the wrong status for "just try again".
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponse.of(
-                        409,
-                        "CONFLICT",
-                        "Stock was modified concurrently. Please retry the request."));
+                .body(ErrorResponse.of(409, "CONFLICT", "Stock was modified concurrently. Please retry the request."));
     }
 
     @ExceptionHandler(InsufficientStockException.class)
