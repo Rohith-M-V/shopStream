@@ -14,11 +14,10 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.TestRestTemplate;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.*;
+import org.springframework.test.annotation.DirtiesContext;
 
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ProductControllerIT extends AbstractIntegrationTest {
 
     @Autowired
@@ -73,6 +72,7 @@ class ProductControllerIT extends AbstractIntegrationTest {
         String reservationId = "test-reservation-" + UUID.randomUUID();
 
         HttpHeaders reserveHeaders = authHeaders("CUSTOMER");
+        HttpHeaders releaseHeaders = authHeaders("CUSTOMER");
         reserveHeaders.set(HeaderNames.IDEMPOTENCY_KEY, reservationId);
         var reserveResponse = restTemplate.exchange("/api/products/" + product.id() + "/reserve", HttpMethod.POST,
                 new HttpEntity<>(new ReserveStockRequest(5), reserveHeaders), ReservationResponse.class);
@@ -84,8 +84,15 @@ class ProductControllerIT extends AbstractIntegrationTest {
                 restTemplate.getForEntity("/api/products/" + product.id(), ProductResponse.class).getBody();
         assertThat(afterReserve.stockQuantity()).isEqualTo(15);
 
-        restTemplate.postForEntity("/api/reservations/" + reservationId + "/release", null, Void.class);
+        ResponseEntity<Void> releaseResponse =
+                restTemplate.exchange(
+                        "/api/reservations/" + reservationId + "/release",
+                        HttpMethod.POST,
+                        new HttpEntity<>(null, releaseHeaders),
+                        Void.class
+                );
 
+        assertThat(releaseResponse.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         ProductResponse afterRelease =
                 restTemplate.getForEntity("/api/products/" + product.id(), ProductResponse.class).getBody();
         assertThat(afterRelease.stockQuantity()).isEqualTo(20);

@@ -3,6 +3,7 @@ package com.shopstream.inventory.exception;
 import com.shopstream.inventory.dto.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -27,6 +28,17 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleDuplicateSku(DuplicateSkuException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ErrorResponse.of(409, "CONFLICT", ex.getMessage()));
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleOptimisticLock(
+            ObjectOptimisticLockingFailureException ex) {
+
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of(
+                        409,
+                        "CONFLICT",
+                        "Stock was modified concurrently. Please retry the request."));
     }
 
     @ExceptionHandler(InsufficientStockException.class)

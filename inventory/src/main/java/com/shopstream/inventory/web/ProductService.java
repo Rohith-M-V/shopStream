@@ -92,7 +92,7 @@ public class ProductService {
     @Transactional
     @Retryable(
             retryFor = ObjectOptimisticLockingFailureException.class,
-            maxAttempts = 3,
+            maxAttempts = 10,
             backoff = @Backoff(delay = 50, multiplier = 2))
     public ReservationResponse reserveStock(UUID productId, String reservationId, int quantity) {
         var existing = reservationRepository.findById(reservationId);

@@ -13,9 +13,9 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.mysql.MySQLContainer;
 
 /**
  * Exercises register -> login -> duplicate-email -> wrong-password against a
@@ -29,7 +29,7 @@ class AuthControllerIT {
 
     @Container
     @ServiceConnection
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4");
+    static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4");
 
     @Autowired
     private TestRestTemplate restTemplate;
@@ -60,8 +60,8 @@ class AuthControllerIT {
         RegisterRequest request = new RegisterRequest("dup@example.com", "correct-horse-battery");
         restTemplate.postForEntity("/api/auth/register", request, AuthResponse.class);
 
-        ResponseEntity<AuthResponse> secondAttempt =
-                restTemplate.postForEntity("/api/auth/register", request, AuthResponse.class);
+        ResponseEntity<Void> secondAttempt =
+                restTemplate.postForEntity("/api/auth/register", request, Void.class);
 
         assertThat(secondAttempt.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     }
@@ -72,8 +72,8 @@ class AuthControllerIT {
         restTemplate.postForEntity("/api/auth/register", request, AuthResponse.class);
 
         var badLogin = new com.shopstream.auth.dto.LoginRequest("wrongpw@example.com", "totally-wrong");
-        ResponseEntity<AuthResponse> response =
-                restTemplate.postForEntity("/api/auth/login", badLogin, AuthResponse.class);
+        ResponseEntity<Void> response =
+                restTemplate.postForEntity("/api/auth/login", badLogin, Void.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
@@ -82,8 +82,8 @@ class AuthControllerIT {
     void loginWithUnknownEmailReturnsUnauthorizedNotNotFound() {
         var unknownLogin = new com.shopstream.auth.dto.LoginRequest("nobody@example.com", "whatever123");
 
-        ResponseEntity<AuthResponse> response =
-                restTemplate.postForEntity("/api/auth/login", unknownLogin, AuthResponse.class);
+        ResponseEntity<Void> response =
+                restTemplate.postForEntity("/api/auth/login", unknownLogin, Void.class);
 
         // 401, not 404 -- we never reveal whether an email is registered.
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);

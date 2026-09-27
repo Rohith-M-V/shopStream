@@ -74,13 +74,18 @@ class ReservationConcurrencyIT extends AbstractIntegrationTest {
         start.countDown(); // release all 30 threads at once
 
         long succeeded = 0;
-        long rejected = 0;
+        long conflicts = 0;
+        long unexpected = 0;
         for (Future<HttpStatus> future : futures) {
             HttpStatus status = future.get(30, TimeUnit.SECONDS);
+            System.out.println("Reservation result: " + status);
+
             if (status == HttpStatus.OK) {
                 succeeded++;
+            } else if (status == HttpStatus.CONFLICT) {
+                conflicts++;
             } else {
-                rejected++;
+                unexpected++;
             }
         }
         pool.shutdown();
@@ -90,7 +95,8 @@ class ReservationConcurrencyIT extends AbstractIntegrationTest {
         // fewer either (a naive single-attempt approach would reject some
         // requests to real available stock just because of lock contention).
         assertThat(succeeded).isEqualTo(initialStock);
-        assertThat(rejected).isEqualTo(concurrentRequests - initialStock);
+        assertThat(conflicts).isEqualTo(concurrentRequests - initialStock);
+        assertThat(unexpected).isEqualTo(0);
 
         ProductResponse finalState =
                 restTemplate.getForEntity("/api/products/" + product.id(), ProductResponse.class).getBody();
