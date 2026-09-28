@@ -31,6 +31,7 @@
         <module>auth</module>
         <module>gateway</module>
         <module>inventory</module>
+        <module>order</module>
     </modules>
 
     <dependencyManagement>

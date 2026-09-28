@@ -1,0 +1,49 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: jdbc:mysql://localhost:3307/order_db?useSSL=false&allowPublicKeyRetrieval=true
+    username: shop
+    password: shop
+  jpa:
+    hibernate:
+      ddl-auto: validate # schema comes from Flyway, never from Hibernate auto-DDL
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # The outbox row already IS the final, fully-serialized JSON message
+      # (see OrderService#serializeEnvelope) -- the relay just ships that string
+      # as-is, so plain StringSerializer is all producer-side JSON handling this
+      # service needs. No JsonSerializer/type-mapping configuration required.
+      acks: all
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location: classpath:keys/public_key.pem
+
+app:
+  outbox:
+    poll-interval-ms: 1000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    com.shopstream: INFO
