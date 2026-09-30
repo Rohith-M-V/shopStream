@@ -41,6 +41,12 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
         <dependency>
+            <!-- Same Boot 4 modularization as Flyway: plain spring-kafka doesn't
+                 self-activate auto-configuration; this dedicated starter does. -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-kafka</artifactId>
+        </dependency>
+        <dependency>
             <!-- Boot 4 moved its own JSON stack to Jackson 3, but Spring Data
                  Redis's Jackson2JsonRedisSerializer is still built on classic
                  Jackson 2 APIs, and this add-on module (for java.time support)
@@ -148,6 +154,16 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-mysql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-kafka</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

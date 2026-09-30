@@ -17,6 +17,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.annotation.DirtiesContext;
 
+// Forces a fresh ApplicationContext (and fresh Testcontainers-backed MySQL/Kafka)
+// for the next test class, rather than reusing this one's.
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class OrderControllerIT extends AbstractIntegrationTest {
 

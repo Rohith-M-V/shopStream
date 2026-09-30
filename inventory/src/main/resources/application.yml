@@ -26,6 +26,20 @@ spring:
           # Same mechanism as the gateway: Boot builds a JwtDecoder straight from
           # this public key file. Inventory never holds the private key.
           public-key-location: classpath:keys/public_key.pem
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+
+app:
+  outbox:
+    poll-interval-ms: 1000
 
 management:
   endpoints:

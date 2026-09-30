@@ -8,17 +8,21 @@ import com.shopstream.order.exception.OrderNotFoundException;
 import com.shopstream.order.order.Order;
 import com.shopstream.order.order.OrderCreatedPayload;
 import com.shopstream.order.order.OrderRepository;
+import com.shopstream.order.order.OrderStatus;
 import com.shopstream.order.outbox.OutboxEvent;
 import com.shopstream.order.outbox.OutboxEventRepository;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderService {
 
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
     private static final String AGGREGATE_TYPE = "Order";
 
     // Spring Boot 4 moved to Jackson 3 (tools.jackson.*). Building the mapper
@@ -76,6 +80,51 @@ public class OrderService {
             throw new OrderNotFoundException(orderId);
         }
         return toResponse(order);
+    }
+
+    /**
+     * Reacts to an InventoryReserved event by moving the order to
+     * PAYMENT_PENDING -- the next stage once payment (Phase 5) exists.
+     *
+     * <p>The idempotency guard here is the order's own status, not a separate
+     * dedup table: this only does anything if the order is still PENDING. A
+     * redelivered InventoryReserved event (Kafka's at-least-once delivery
+     * means this WILL happen sometimes) finds the order already past PENDING
+     * and simply no-ops, rather than trying to apply the same transition
+     * twice or overwrite a later state.
+     */
+    @Transactional
+    public void handleInventoryReserved(String orderId) {
+        applyTransitionIfPending(orderId, OrderStatus.PAYMENT_PENDING, "InventoryReserved");
+    }
+
+    /**
+     * Reacts to an InventoryFailed event by cancelling the order. No
+     * compensation is needed here -- nothing was ever reserved, so there is
+     * nothing to undo. (Compensation -- releasing an ALREADY-reserved
+     * quantity -- becomes relevant once payment can fail after a successful
+     * reservation, in Phase 5.)
+     */
+    @Transactional
+    public void handleInventoryFailed(String orderId, String reason) {
+        log.info("Order {} cancelled: inventory reported {}", orderId, reason);
+        applyTransitionIfPending(orderId, OrderStatus.CANCELLED, "InventoryFailed");
+    }
+
+    private void applyTransitionIfPending(String orderId, OrderStatus newStatus, String eventName) {
+        Order order = orderRepository.findById(orderId).orElse(null);
+        if (order == null) {
+            // Defensive only -- should not happen, since the order is always
+            // written before its OrderCreated event is even published.
+            log.warn("Received {} for unknown order {}", eventName, orderId);
+            return;
+        }
+        if (order.getStatus() != OrderStatus.PENDING) {
+            log.debug("Ignoring {} for order {}: already in status {}", eventName, orderId, order.getStatus());
+            return;
+        }
+        order.setStatus(newStatus);
+        orderRepository.save(order);
     }
 
     private String serializeEnvelope(Order order) {
