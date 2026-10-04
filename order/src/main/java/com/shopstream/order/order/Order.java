@@ -63,6 +63,14 @@ public class Order {
     }
 
     public static Order create(String id, UUID customerId, UUID productId, int quantity) {
-        return new Order(id, customerId, productId, quantity, OrderStatus.PENDING, Instant.now().truncatedTo(ChronoUnit.MICROS));
+        // Truncated to microseconds to match the TIMESTAMP(6) column: MySQL
+        // silently drops anything finer when storing, so without this, a
+        // freshly-created in-memory Order's createdAt (nanosecond precision)
+        // would stop being equal to the same row's createdAt once read back
+        // from the database (microsecond precision) -- exactly what broke the
+        // idempotent-replay test, where one response comes from the just-saved
+        // object and a replay's response comes from a DB read.
+        return new Order(id, customerId, productId, quantity, OrderStatus.PENDING,
+                Instant.now().truncatedTo(ChronoUnit.MICROS));
     }
 }

@@ -141,4 +141,48 @@ class OrderEventsListenerIT extends AbstractIntegrationTest {
                 restTemplate.getForEntity("/api/products/" + product.id(), ProductResponse.class).getBody();
         assertThat(unchanged.stockQuantity()).isEqualTo(2);
     }
+
+    private void publishReleaseRequested(String orderId, UUID customerId, UUID productId, int quantity) {
+        String json = """
+                {"eventId":"%s","type":"%s","version":1,"occurredAt":"%s","aggregateId":"%s",
+                 "payload":{"orderId":"%s","customerId":"%s","productId":"%s","quantity":%d,"createdAt":"%s"}}
+                """.formatted(UUID.randomUUID(), EventTypes.INVENTORY_RELEASE_REQUESTED, Instant.now(), orderId,
+                orderId, customerId, productId, quantity, Instant.now());
+
+        Properties props = new Properties();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA.getBootstrapServers());
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        try (KafkaProducer<String, String> producer = new KafkaProducer<>(props)) {
+            producer.send(new ProducerRecord<>(Topics.ORDER_EVENTS, orderId, json));
+        }
+    }
+
+    /**
+     * The compensation path: a reservation succeeds (as if payment hadn't
+     * been attempted yet), then a release is requested (as if payment had
+     * just failed) -- proving the released stock actually comes back, not
+     * just that the call didn't throw.
+     */
+    @Test
+    void releaseRequestedAfterASuccessfulReservationRestoresStock() {
+        ProductResponse product = createProduct("SAGA-SKU-3", 10);
+        String orderId = "order-" + UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+
+        publishOrderCreated(orderId, customerId, product.id(), 4);
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
+            ProductResponse afterReserve =
+                    restTemplate.getForEntity("/api/products/" + product.id(), ProductResponse.class).getBody();
+            assertThat(afterReserve.stockQuantity()).isEqualTo(6);
+        });
+
+        publishReleaseRequested(orderId, customerId, product.id(), 4);
+
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
+            ProductResponse afterRelease =
+                    restTemplate.getForEntity("/api/products/" + product.id(), ProductResponse.class).getBody();
+            assertThat(afterRelease.stockQuantity()).isEqualTo(10);
+        });
+    }
 }

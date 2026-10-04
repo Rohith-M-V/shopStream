@@ -4,6 +4,7 @@ import com.shopstream.common.events.EventTypes;
 import com.shopstream.common.events.Topics;
 import com.shopstream.inventory.exception.InsufficientStockException;
 import com.shopstream.inventory.exception.ProductNotFoundException;
+import com.shopstream.inventory.exception.ReservationNotFoundException;
 import com.shopstream.inventory.web.ProductService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,19 +18,21 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Consumes order-events and reacts to OrderCreated by attempting a stock
- * reservation. This is the saga in action: order and inventory never call
- * each other directly, they only react to events the other one published.
+ * Consumes order-events and reacts to two event types: OrderCreated (attempt
+ * a reservation) and, as of Phase 5, InventoryReleaseRequested (release a
+ * reservation already made -- the compensating transaction for when payment
+ * fails after inventory already succeeded). PaymentRequested also lands on
+ * this topic but is irrelevant here and is ignored, same as any future
+ * unrecognised type.
  *
  * <p>The distinction that matters most in this class: {@link
- * InsufficientStockException} and {@link ProductNotFoundException} are
- * BUSINESS outcomes -- caught here, and turned into an InventoryFailed event,
- * not allowed to propagate. Retrying "insufficient stock" can never succeed,
- * so letting Kafka's retry machinery repeatedly redeliver it would just waste
- * cycles and delay the InventoryFailed event the order service is waiting
- * for. Any OTHER exception (a DB outage, a bug) is a genuinely transient or
- * unexpected failure and is allowed to propagate, which is what triggers
- * {@code @RetryableTopic}'s retry-then-DLT behavior below.
+ * InsufficientStockException}, {@link ProductNotFoundException}, and (for the
+ * release path) {@link ReservationNotFoundException} are BUSINESS outcomes --
+ * caught here, never allowed to propagate and trigger a pointless retry.
+ * Retrying "insufficient stock" can never succeed. Any OTHER exception (a DB
+ * outage, a bug) is genuinely transient or unexpected and IS allowed to
+ * propagate, which is what triggers {@code @RetryableTopic}'s retry-then-DLT
+ * behavior below.
  */
 @Component
 public class OrderEventsListener {
@@ -49,22 +52,39 @@ public class OrderEventsListener {
             topicSuffixingStrategy = TopicSuffixingStrategy.SUFFIX_WITH_INDEX_VALUE)
     @KafkaListener(topics = Topics.ORDER_EVENTS, groupId = "inventory-service")
     public void onOrderEvent(String message) {
-        IncomingOrderCreatedEvent event = OBJECT_MAPPER.readValue(message, IncomingOrderCreatedEvent.class);
+        IncomingOrderEvent event = OBJECT_MAPPER.readValue(message, IncomingOrderEvent.class);
+        IncomingOrderEvent.Payload payload = event.payload();
 
-        // This service only cares about ORDER_CREATED; other event types may
-        // land on this same topic in the future, and should be ignored here
-        // rather than treated as an error.
-        if (!EventTypes.ORDER_CREATED.equals(event.type())) {
-            return;
+        if (EventTypes.ORDER_CREATED.equals(event.type())) {
+            handleOrderCreated(payload);
+        } else if (EventTypes.INVENTORY_RELEASE_REQUESTED.equals(event.type())) {
+            handleReleaseRequested(payload);
         }
+        // PAYMENT_REQUESTED (and anything else future) is ignored here.
+    }
 
-        IncomingOrderCreatedEvent.Payload payload = event.payload();
+    private void handleOrderCreated(IncomingOrderEvent.Payload payload) {
         try {
             productService.reserveStock(payload.productId(), payload.orderId(), payload.quantity());
             log.info("Reserved stock for order {}", payload.orderId());
         } catch (InsufficientStockException | ProductNotFoundException e) {
             log.info("Could not reserve stock for order {}: {}", payload.orderId(), e.getMessage());
             productService.recordReservationFailure(payload.productId(), payload.orderId(), e.getMessage());
+        }
+    }
+
+    private void handleReleaseRequested(IncomingOrderEvent.Payload payload) {
+        try {
+            productService.releaseStock(payload.orderId());
+            log.info("Released reservation for order {} (payment failed, compensating)", payload.orderId());
+        } catch (ReservationNotFoundException e) {
+            // Should not happen in normal operation -- a release is only ever
+            // requested for an order that reached PAYMENT_PENDING, which means
+            // a reservation must have existed. Treated as a business no-op
+            // rather than crashing into a pointless retry, since retrying
+            // can't make a real reservation appear.
+            log.warn("Release requested for order {} but no reservation was found: {}",
+                    payload.orderId(), e.getMessage());
         }
     }
 

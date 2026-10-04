@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -64,7 +65,11 @@ public class OutboxEvent {
     }
 
     public static OutboxEvent create(String aggregateType, String aggregateId, String eventType, String payload) {
-        return new OutboxEvent(UUID.randomUUID(), aggregateType, aggregateId, eventType, payload, Instant.now());
+        // Truncated to microseconds to match the TIMESTAMP(6) column -- same
+        // reasoning as Order.create(): avoids a mismatch between the in-memory
+        // nanosecond-precision value and what a later DB read would return.
+        return new OutboxEvent(UUID.randomUUID(), aggregateType, aggregateId, eventType, payload,
+                Instant.now().truncatedTo(ChronoUnit.MICROS));
     }
 
     public boolean isPublished() {

@@ -17,6 +17,8 @@ $InventoryKeysDir = Join-Path $RootDir "inventory/src/main/resources/keys"
 $InventoryTestKeysDir = Join-Path $RootDir "inventory/src/test/resources/keys"
 $OrderKeysDir = Join-Path $RootDir "order/src/main/resources/keys"
 $OrderTestKeysDir = Join-Path $RootDir "order/src/test/resources/keys"
+$PaymentKeysDir = Join-Path $RootDir "payment/src/main/resources/keys"
+$PaymentTestKeysDir = Join-Path $RootDir "payment/src/test/resources/keys"
 
 New-Item -ItemType Directory -Force -Path $AuthKeysDir | Out-Null
 New-Item -ItemType Directory -Force -Path $GatewayKeysDir | Out-Null
@@ -24,6 +26,8 @@ New-Item -ItemType Directory -Force -Path $InventoryKeysDir | Out-Null
 New-Item -ItemType Directory -Force -Path $InventoryTestKeysDir | Out-Null
 New-Item -ItemType Directory -Force -Path $OrderKeysDir | Out-Null
 New-Item -ItemType Directory -Force -Path $OrderTestKeysDir | Out-Null
+New-Item -ItemType Directory -Force -Path $PaymentKeysDir | Out-Null
+New-Item -ItemType Directory -Force -Path $PaymentTestKeysDir | Out-Null
 
 $TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid())
 New-Item -ItemType Directory -Force -Path $TmpDir | Out-Null
@@ -46,6 +50,9 @@ try {
     Copy-Item $publicKeyPath (Join-Path $InventoryTestKeysDir "public_key.pem") -Force
     Copy-Item $privateKeyPath (Join-Path $OrderTestKeysDir "private_key.pem") -Force
     Copy-Item $publicKeyPath (Join-Path $OrderTestKeysDir "public_key.pem") -Force
+    Copy-Item $publicKeyPath (Join-Path $PaymentKeysDir "public_key.pem") -Force
+    Copy-Item $privateKeyPath (Join-Path $PaymentTestKeysDir "private_key.pem") -Force
+    Copy-Item $publicKeyPath (Join-Path $PaymentTestKeysDir "public_key.pem") -Force
 
     Write-Host "New RSA key pair written to:"
     Write-Host "  $AuthKeysDir\private_key.pem  (auth service only -- never share this)"
@@ -55,6 +62,8 @@ try {
     Write-Host "  $OrderKeysDir\public_key.pem"
     Write-Host "  $InventoryTestKeysDir\*.pem (test fixtures only)"
     Write-Host "  $OrderTestKeysDir\*.pem (test fixtures only)"
+    Write-Host "  $PaymentKeysDir\public_key.pem"
+    Write-Host "  $PaymentTestKeysDir\*.pem (test fixtures only)"
 }
 finally {
     Remove-Item -Recurse -Force $TmpDir

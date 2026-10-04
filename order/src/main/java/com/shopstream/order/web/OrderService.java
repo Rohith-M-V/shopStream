@@ -6,7 +6,7 @@ import com.shopstream.order.dto.CreateOrderRequest;
 import com.shopstream.order.dto.OrderResponse;
 import com.shopstream.order.exception.OrderNotFoundException;
 import com.shopstream.order.order.Order;
-import com.shopstream.order.order.OrderCreatedPayload;
+import com.shopstream.order.order.OrderEventPayload;
 import com.shopstream.order.order.OrderRepository;
 import com.shopstream.order.order.OrderStatus;
 import com.shopstream.order.outbox.OutboxEvent;
@@ -53,15 +53,9 @@ public class OrderService {
 
         Order order = Order.create(orderId, customerId, request.productId(), request.quantity());
         orderRepository.save(order);
+        publishOrderEvent(order, EventTypes.ORDER_CREATED);
 
-        OutboxEvent outboxEvent = OutboxEvent.create(
-                AGGREGATE_TYPE,
-                order.getId(),
-                EventTypes.ORDER_CREATED,
-                serializeEnvelope(order));
-        outboxEventRepository.save(outboxEvent);
-
-        // Both saves above are in this same @Transactional method, against the
+        // Both writes above are in this same @Transactional method, against the
         // same database -- they commit together or not at all. That's the
         // entire trick: no separate call to Kafka happens here at all.
         return toResponse(order);
@@ -84,61 +78,101 @@ public class OrderService {
 
     /**
      * Reacts to an InventoryReserved event by moving the order to
-     * PAYMENT_PENDING -- the next stage once payment (Phase 5) exists.
-     *
-     * <p>The idempotency guard here is the order's own status, not a separate
-     * dedup table: this only does anything if the order is still PENDING. A
-     * redelivered InventoryReserved event (Kafka's at-least-once delivery
-     * means this WILL happen sometimes) finds the order already past PENDING
-     * and simply no-ops, rather than trying to apply the same transition
-     * twice or overwrite a later state.
+     * PAYMENT_PENDING and -- in the SAME transaction -- publishing
+     * PaymentRequested, which is what actually triggers the payment service.
+     * Same transactional-outbox guarantee as order creation: the status
+     * change and the event announcing it either both commit or neither does.
      */
     @Transactional
     public void handleInventoryReserved(String orderId) {
-        applyTransitionIfPending(orderId, OrderStatus.PAYMENT_PENDING, "InventoryReserved");
+        Order order = applyTransition(orderId, OrderStatus.PENDING, OrderStatus.PAYMENT_PENDING, "InventoryReserved");
+        if (order != null) {
+            publishOrderEvent(order, EventTypes.PAYMENT_REQUESTED);
+        }
     }
 
     /**
      * Reacts to an InventoryFailed event by cancelling the order. No
-     * compensation is needed here -- nothing was ever reserved, so there is
-     * nothing to undo. (Compensation -- releasing an ALREADY-reserved
-     * quantity -- becomes relevant once payment can fail after a successful
-     * reservation, in Phase 5.)
+     * compensation needed -- nothing was ever reserved, so there is nothing
+     * to undo.
      */
     @Transactional
     public void handleInventoryFailed(String orderId, String reason) {
         log.info("Order {} cancelled: inventory reported {}", orderId, reason);
-        applyTransitionIfPending(orderId, OrderStatus.CANCELLED, "InventoryFailed");
+        applyTransition(orderId, OrderStatus.PENDING, OrderStatus.CANCELLED, "InventoryFailed");
     }
 
-    private void applyTransitionIfPending(String orderId, OrderStatus newStatus, String eventName) {
+    /**
+     * Reacts to a PaymentSucceeded event by confirming the order -- the
+     * saga's successful end state.
+     */
+    @Transactional
+    public void handlePaymentSucceeded(String orderId) {
+        applyTransition(orderId, OrderStatus.PAYMENT_PENDING, OrderStatus.CONFIRMED, "PaymentSucceeded");
+    }
+
+    /**
+     * Reacts to a PaymentFailed event by cancelling the order AND publishing
+     * InventoryReleaseRequested -- the saga's one genuine compensating
+     * transaction. Unlike handleInventoryFailed, there IS something to undo
+     * here: inventory already committed a real reservation to get this order
+     * to PAYMENT_PENDING in the first place, so that reservation must now be
+     * explicitly released, not just abandoned.
+     */
+    @Transactional
+    public void handlePaymentFailed(String orderId, String reason) {
+        log.info("Order {} cancelled: payment failed: {}", orderId, reason);
+        Order order = applyTransition(orderId, OrderStatus.PAYMENT_PENDING, OrderStatus.CANCELLED, "PaymentFailed");
+        if (order != null) {
+            publishOrderEvent(order, EventTypes.INVENTORY_RELEASE_REQUESTED);
+        }
+    }
+
+    /**
+     * Applies a status transition only if the order is currently in EXACTLY
+     * the state the caller expects it to be in ({@code requiredStatus}) --
+     * not "any non-terminal state", which would be looser than it sounds.
+     * Being precise here matters: a redelivered InventoryReserved event
+     * arriving after the order has already moved past PAYMENT_PENDING must
+     * be a true no-op, including NOT re-publishing PaymentRequested a second
+     * time -- a vaguer guard (e.g. "not already CONFIRMED or CANCELLED")
+     * would let that duplicate slip through.
+     *
+     * <p>Returns the updated order if the transition was applied, or null if
+     * it was skipped (unknown order, or not in the expected prior state) --
+     * callers use that null to decide whether to publish a follow-on event,
+     * since a skipped transition must not trigger the next step of the saga.
+     */
+    private Order applyTransition(String orderId, OrderStatus requiredStatus, OrderStatus newStatus,
+            String eventName) {
         Order order = orderRepository.findById(orderId).orElse(null);
         if (order == null) {
-            // Defensive only -- should not happen, since the order is always
-            // written before its OrderCreated event is even published.
             log.warn("Received {} for unknown order {}", eventName, orderId);
-            return;
+            return null;
         }
-        if (order.getStatus() != OrderStatus.PENDING) {
-            log.debug("Ignoring {} for order {}: already in status {}", eventName, orderId, order.getStatus());
-            return;
+        if (order.getStatus() != requiredStatus) {
+            log.debug("Ignoring {} for order {}: expected status {} but was {}",
+                    eventName, orderId, requiredStatus, order.getStatus());
+            return null;
         }
         order.setStatus(newStatus);
         orderRepository.save(order);
+        return order;
     }
 
-    private String serializeEnvelope(Order order) {
-        var payload = new OrderCreatedPayload(
-                order.getId(), order.getCustomerId(), order.getProductId(), order.getQuantity(),
-                order.getCreatedAt());
-        var envelope = EventEnvelope.of(EventTypes.ORDER_CREATED, order.getId(), payload);
+    private void publishOrderEvent(Order order, String eventType) {
+        var payload = OrderEventPayload.of(order);
+        var envelope = EventEnvelope.of(eventType, order.getId(), payload);
+        outboxEventRepository.save(OutboxEvent.create(AGGREGATE_TYPE, order.getId(), eventType, serialize(envelope)));
+    }
+
+    private String serialize(EventEnvelope<?> envelope) {
         try {
             return OBJECT_MAPPER.writeValueAsString(envelope);
         } catch (Exception e) {
-            // A serialization failure here means the whole order-creation
-            // transaction rolls back -- correct behavior: we'd rather fail the
-            // request than silently create an order with no matching event.
-            throw new IllegalStateException("Failed to serialize OrderCreated event", e);
+            // A serialization failure here rolls back the whole calling
+            // transaction -- we'd rather fail loudly than silently lose an event.
+            throw new IllegalStateException("Failed to serialize outbox event", e);
         }
     }
 

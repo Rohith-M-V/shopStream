@@ -32,6 +32,7 @@
         <module>gateway</module>
         <module>inventory</module>
         <module>order</module>
+        <module>payment</module>
     </modules>
 
     <dependencyManagement>
