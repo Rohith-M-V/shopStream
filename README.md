@@ -50,6 +50,50 @@ contrast, needs no compensation -- nothing was ever reserved.
 Payment never charges twice: a `PaymentAttempt` row keyed by order id is the
 idempotency ledger, exactly like inventory's `StockReservation`.
 
+### Real PayPal sandbox integration (optional)
+
+`FakePaymentProvider` is the default and needs no setup -- it's what every
+test and a fresh clone use. A real `PayPalPaymentProvider` implements the
+same `PaymentProvider` interface and is a drop-in swap via one property;
+`PaymentService` itself never changes either way.
+
+To actually exercise it:
+
+1. Create a free account at [developer.paypal.com](https://developer.paypal.com)
+   and a Sandbox REST API app, to get a **Client ID** and **Client Secret**.
+2. Generate a sandbox test card: Dashboard > Sandbox > Testing Tools >
+   Credit Card Generator.
+3. Register a webhook (Dashboard > Sebhooks) subscriandbox > Wbed to
+   `PAYMENT.CAPTURE.COMPLETED` and `PAYMENT.CAPTURE.DENIED`, pointing at
+   `https://<your-public-url>/api/payments/webhooks/paypal`. PayPal's
+   servers need a **public** HTTPS URL to reach this -- for local testing,
+   tunnel your gateway with a tool like [ngrok](https://ngrok.com)
+   (`ngrok http 8080`) and use the URL it gives you. Copy the **Webhook ID**
+   shown after registering.
+4. Set these before starting `payment` (PowerShell):
+
+   ```powershell
+   $env:PAYMENT_PROVIDER = "paypal"
+   $env:PAYPAL_CLIENT_ID = "..."
+   $env:PAYPAL_CLIENT_SECRET = "..."
+   $env:PAYPAL_WEBHOOK_ID = "..."
+   $env:PAYPAL_TEST_CARD_NUMBER = "..."
+   $env:PAYPAL_TEST_CARD_EXPIRY = "2027-12"
+   $env:PAYPAL_TEST_CARD_CVV = "123"
+   cd payment
+   mvn spring-boot:run
+   ```
+
+Known, named limitation: this provider uses PayPal's `payment_source.card`
+(guest/direct card checkout) rather than the usual wallet-approval redirect
+flow, since there's no UI in this project to send a buyer through that
+redirect. This means it cannot complete a flow requiring extra buyer action
+(e.g. a 3D Secure challenge) -- see `PayPalPaymentProvider`'s class comment.
+The webhook handler also deliberately does not attempt full reconciliation
+purely from webhook data (it only carries the order id and outcome, not
+customer/product/quantity) -- see `PayPalWebhookController`'s class comment
+for what a production system would add to close that gap.
+
 Run any service from its own folder with `mvn spring-boot:run`. If you've
 changed `common`, run `mvn install -DskipTests` from the repo root first.
 

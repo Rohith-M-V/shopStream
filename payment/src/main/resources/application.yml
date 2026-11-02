@@ -34,6 +34,25 @@ spring:
 app:
   outbox:
     poll-interval-ms: 1000
+  payment:
+    # fake (default): offline-runnable, deterministic, no external
+    # credentials needed -- this is what every test and a fresh clone use.
+    # paypal: real PayPal sandbox integration -- requires the paypal.* block
+    # below to be filled in with real sandbox values. See the README section
+    # on PayPal sandbox setup before switching this.
+    provider: ${PAYMENT_PROVIDER:fake}
+
+# Only read when app.payment.provider=paypal. Every value defaults to blank
+# so the app still starts cleanly with the fake provider active.
+paypal:
+  base-url: ${PAYPAL_BASE_URL:https://api-m.sandbox.paypal.com}
+  client-id: ${PAYPAL_CLIENT_ID:}
+  client-secret: ${PAYPAL_CLIENT_SECRET:}
+  webhook-id: ${PAYPAL_WEBHOOK_ID:}
+  test-card:
+    number: ${PAYPAL_TEST_CARD_NUMBER:}
+    expiry: ${PAYPAL_TEST_CARD_EXPIRY:}
+    cvv: ${PAYPAL_TEST_CARD_CVV:}
 
 management:
   endpoints:

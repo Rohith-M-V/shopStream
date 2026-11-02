@@ -78,6 +78,17 @@ public class PaymentService {
         outboxEventRepository.save(OutboxEvent.create(AGGREGATE_TYPE, orderId, eventType, serialize(envelope)));
     }
 
+    /**
+     * Used by the PayPal webhook handler to decide whether a given order's
+     * outcome has already been recorded via the synchronous charge path --
+     * see PayPalWebhookController for why the webhook stops at this check
+     * rather than attempting to reconcile a missing attempt itself.
+     */
+    @Transactional(readOnly = true)
+    public boolean isAlreadyProcessed(String orderId) {
+        return paymentAttemptRepository.existsById(orderId);
+    }
+
     @Transactional(readOnly = true)
     public PaymentResponse getPayment(String orderId, UUID requestingCustomerId) {
         PaymentAttempt attempt = paymentAttemptRepository.findById(orderId)

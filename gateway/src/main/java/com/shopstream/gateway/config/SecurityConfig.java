@@ -33,6 +33,9 @@ public class SecurityConfig {
                         .pathMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         // Catalog browsing is public; inventory enforces ADMIN for writes itself.
                         .pathMatchers(HttpMethod.GET, "/api/products/**").permitAll()
+                        // PayPal's servers call this directly with no JWT -- the webhook's own
+                        // signature (verified inside payment) is what authenticates that caller.
+                        .pathMatchers("/api/payments/webhooks/**").permitAll()
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
         return http.build();

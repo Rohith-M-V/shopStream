@@ -1,6 +1,7 @@
 package com.shopstream.payment.provider;
 
 import java.util.UUID;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,6 +18,11 @@ import org.springframework.stereotype.Component;
  * quantity (99) the same way.
  */
 @Component
+// The default: automated tests and a fresh clone need a predictable,
+// offline-runnable outcome with no external credentials required. A real
+// PayPalPaymentProvider implements this same PaymentProvider interface and
+// is selected instead via app.payment.provider=paypal (see application.yml).
+@ConditionalOnProperty(name = "app.payment.provider", havingValue = "fake", matchIfMissing = true)
 public class FakePaymentProvider implements PaymentProvider {
 
     private static final int DECLINE_QUANTITY_SENTINEL = 99;
