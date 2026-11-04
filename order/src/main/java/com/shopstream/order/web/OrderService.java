@@ -99,7 +99,11 @@ public class OrderService {
     @Transactional
     public void handleInventoryFailed(String orderId, String reason) {
         log.info("Order {} cancelled: inventory reported {}", orderId, reason);
-        applyTransition(orderId, OrderStatus.PENDING, OrderStatus.CANCELLED, "InventoryFailed");
+        Order order = applyTransition(orderId, OrderStatus.PENDING, OrderStatus.CANCELLED, "InventoryFailed");
+        if (order != null) {
+            // Terminal-outcome event for downstream consumers (e.g. notification).
+            publishOrderEvent(order, EventTypes.ORDER_CANCELLED);
+        }
     }
 
     /**
@@ -108,7 +112,11 @@ public class OrderService {
      */
     @Transactional
     public void handlePaymentSucceeded(String orderId) {
-        applyTransition(orderId, OrderStatus.PAYMENT_PENDING, OrderStatus.CONFIRMED, "PaymentSucceeded");
+        Order order = applyTransition(orderId, OrderStatus.PAYMENT_PENDING, OrderStatus.CONFIRMED,
+                "PaymentSucceeded");
+        if (order != null) {
+            publishOrderEvent(order, EventTypes.ORDER_CONFIRMED);
+        }
     }
 
     /**
@@ -124,6 +132,7 @@ public class OrderService {
         log.info("Order {} cancelled: payment failed: {}", orderId, reason);
         Order order = applyTransition(orderId, OrderStatus.PAYMENT_PENDING, OrderStatus.CANCELLED, "PaymentFailed");
         if (order != null) {
+            publishOrderEvent(order, EventTypes.ORDER_CANCELLED);
             publishOrderEvent(order, EventTypes.INVENTORY_RELEASE_REQUESTED);
         }
     }

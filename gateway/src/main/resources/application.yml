@@ -21,6 +21,8 @@ services:
     uri: http://localhost:8083
   payment:
     uri: http://localhost:8084
+  notification:
+    uri: http://localhost:8085
 
 management:
   endpoints:

@@ -28,6 +28,9 @@ public class RouteConfig {
     @Value("${services.payment.uri:http://localhost:8084}")
     private String paymentServiceUri;
 
+    @Value("${services.notification.uri:http://localhost:8085}")
+    private String notificationServiceUri;
+
     @Bean
     public RouteLocator routes(RouteLocatorBuilder builder) {
         return builder.routes()
@@ -43,6 +46,9 @@ public class RouteConfig {
                 .route("payment-service", r -> r
                         .path("/api/payments/**")
                         .uri(paymentServiceUri))
+                .route("notification-service", r -> r
+                        .path("/api/notifications/**")
+                        .uri(notificationServiceUri))
                 .build();
     }
 }

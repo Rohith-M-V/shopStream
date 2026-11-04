@@ -20,6 +20,7 @@ Kafka UI: http://localhost:8090
 | inventory | 8082 | Product catalog, stock reservation, Redis caching  |
 | order     | 8083 | Idempotent order creation, transactional outbox -> Kafka |
 | payment   | 8084 | Event-driven payment behind a PaymentProvider abstraction |
+| notification | 8085 | Notifies customers of terminal order outcomes; idempotent consumer |
 
 ## Phase 4: the saga
 
@@ -63,7 +64,7 @@ To actually exercise it:
    and a Sandbox REST API app, to get a **Client ID** and **Client Secret**.
 2. Generate a sandbox test card: Dashboard > Sandbox > Testing Tools >
    Credit Card Generator.
-3. Register a webhook (Dashboard > Sebhooks) subscriandbox > Wbed to
+3. Register a webhook (Dashboard > Sandbox > Webhooks) subscribed to
    `PAYMENT.CAPTURE.COMPLETED` and `PAYMENT.CAPTURE.DENIED`, pointing at
    `https://<your-public-url>/api/payments/webhooks/paypal`. PayPal's
    servers need a **public** HTTPS URL to reach this -- for local testing,
@@ -93,6 +94,21 @@ The webhook handler also deliberately does not attempt full reconciliation
 purely from webhook data (it only carries the order id and outcome, not
 customer/product/quantity) -- see `PayPalWebhookController`'s class comment
 for what a production system would add to close that gap.
+
+## Phase 6a: notification
+
+`order` now publishes `OrderConfirmed` and `OrderCancelled` through its
+outbox, in the same transaction as the status change. `notification`
+consumes them from `order-events` (retry topics + DLT like every other
+listener) and records/sends a notification through a `NotificationSender`
+interface (default: a logging sender, no infrastructure needed).
+
+It is the project's third idempotency style. Payment dedupes on the business
+id (one `PaymentAttempt` per order); order dedupes on current status; the
+notification service dedupes on the message itself: an atomic
+`INSERT IGNORE` into `processed_events (consumer_group, event_id)` in the
+same transaction as the side effect, so a redelivered event is skipped and a
+failed attempt rolls its claim back and can be retried.
 
 Run any service from its own folder with `mvn spring-boot:run`. If you've
 changed `common`, run `mvn install -DskipTests` from the repo root first.

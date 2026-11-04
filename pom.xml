@@ -33,6 +33,7 @@
         <module>inventory</module>
         <module>order</module>
         <module>payment</module>
+        <module>notification</module>
     </modules>
 
     <dependencyManagement>
