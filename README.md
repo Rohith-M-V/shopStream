@@ -110,6 +110,37 @@ notification service dedupes on the message itself: an atomic
 same transaction as the side effect, so a redelivered event is skipped and a
 failed attempt rolls its claim back and can be retried.
 
+## Phase 6b: rate limiting (gateway)
+
+The gateway runs its own Redis token-bucket limiter (`gateway/.../ratelimit`),
+not Spring Cloud Gateway's built-in one. The whole refill-and-consume step is a
+Lua script (`scripts/token_bucket.lua`) executed atomically inside Redis, so
+concurrent requests can't both read "one token left" and both get through. It
+uses Redis `TIME`, not the gateway's clock, so several gateway instances can't
+drift apart.
+
+| Bucket    | Applies to                                  | Key              | Default                      |
+|-----------|---------------------------------------------|------------------|------------------------------|
+| user      | requests with a valid JWT                   | JWT subject      | burst 50, 25/s               |
+| anonymous | public routes without a token               | client IP        | burst 30, 10/s               |
+| auth      | `POST /api/auth/login` and `/register`      | client IP        | burst 5, then about 1 per 10s |
+
+Over-limit requests get `429` with `Retry-After`, `X-RateLimit-Remaining` and
+`X-RateLimit-Burst-Capacity`. Settings live under `app.rate-limit.*` in the
+gateway's `application.yml`.
+
+- **Fails open.** If Redis is down or slower than `redis-timeout-ms`, requests
+  pass and `gateway.ratelimit.requests{result=error}` counts it. The cost: login
+  brute-force protection is off while Redis is unavailable.
+- **Client IP.** By default the socket's remote address. Behind a load balancer
+  that is the balancer's address, so set `app.rate-limit.trust-forwarded-for=true`
+  (it uses the rightmost `X-Forwarded-For` entry) only when a proxy you control
+  sets that header.
+- Requests with a missing or invalid token are rejected by Spring Security
+  before the limiter runs, so they don't consume tokens.
+- Metrics: `gateway.ratelimit.requests` tagged by `policy` and `result`
+  (`allowed`, `limited`, `error`), ready for Phase 7.
+
 Run any service from its own folder with `mvn spring-boot:run`. If you've
 changed `common`, run `mvn install -DskipTests` from the repo root first.
 

@@ -14,7 +14,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
  * proves the thing this phase is actually about: unauthenticated requests to a
  * protected path are rejected before any proxying happens.
  */
-@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT, properties = "app.rate-limit.enabled=false")
 @AutoConfigureWebTestClient
 class GatewaySecurityTest {
 

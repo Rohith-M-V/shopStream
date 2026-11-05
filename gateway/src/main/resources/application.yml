@@ -4,6 +4,13 @@ server:
 spring:
   application:
     name: gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # Fail fast: the rate limiter fails open, so a dead Redis must not stall requests.
+      connect-timeout: 200ms
+      timeout: 200ms
   security:
     oauth2:
       resourceserver:
@@ -23,6 +30,25 @@ services:
     uri: http://localhost:8084
   notification:
     uri: http://localhost:8085
+
+app:
+  rate-limit:
+    enabled: true
+    # Only set true behind a proxy you control (see RateLimitProperties).
+    trust-forwarded-for: false
+    redis-timeout-ms: 150
+    # Logged-in callers, keyed by JWT subject: burst of 50, sustained 25/s.
+    user:
+      capacity: 50
+      refill-per-second: 25
+    # Public routes without a token, keyed by client IP.
+    anonymous:
+      capacity: 30
+      refill-per-second: 10
+    # POST /api/auth/login and /register, keyed by client IP: burst of 5, then ~1 per 10s.
+    auth:
+      capacity: 5
+      refill-per-second: 0.1
 
 management:
   endpoints:
